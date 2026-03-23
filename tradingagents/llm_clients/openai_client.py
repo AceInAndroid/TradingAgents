@@ -22,6 +22,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "reasoning_effort",
     "api_key", "callbacks", "http_client", "http_async_client",
+    "use_responses_api",
 )
 
 # Provider base URLs and API key env vars
@@ -30,6 +31,8 @@ _PROVIDER_CONFIG = {
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "ollama": ("http://localhost:11434/v1", None),
 }
+
+_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 
 class OpenAIClient(BaseLLMClient):
@@ -73,12 +76,25 @@ class OpenAIClient(BaseLLMClient):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
-        # Native OpenAI: use Responses API for consistent behavior across
-        # all model families. Third-party providers use Chat Completions.
-        if self.provider == "openai":
+        # Native OpenAI uses the Responses API. Third-party OpenAI-compatible
+        # services commonly only expose chat/completions, so keep them on the
+        # default Chat Completions path when a custom base_url is configured.
+        if self._should_use_responses_api():
             llm_kwargs["use_responses_api"] = True
 
         return NormalizedChatOpenAI(**llm_kwargs)
+
+    def _should_use_responses_api(self) -> bool:
+        if "use_responses_api" in self.kwargs:
+            return bool(self.kwargs["use_responses_api"])
+
+        if self.provider != "openai":
+            return False
+
+        if not self.base_url:
+            return True
+
+        return self.base_url.rstrip("/") == _OPENAI_BASE_URL
 
     def validate_model(self) -> bool:
         """Validate model for the provider."""
