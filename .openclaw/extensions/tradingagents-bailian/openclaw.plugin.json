@@ -1,0 +1,54 @@
+{
+  "id": "tradingagents-bailian",
+  "name": "TradingAgents Bailian",
+  "description": "Runs the local TradingAgents repository through run_bailian.py and returns structured stock analysis.",
+  "version": "0.1.0",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "repoPath": {
+        "type": "string"
+      },
+      "pythonPath": {
+        "type": "string"
+      },
+      "defaultPreset": {
+        "type": "string",
+        "enum": ["balanced", "fast", "coder", "glm", "kimi"]
+      },
+      "defaultAnalysts": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["market", "social", "news", "fundamentals"]
+        }
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000
+      }
+    }
+  },
+  "uiHints": {
+    "repoPath": {
+      "label": "TradingAgents Repo Path",
+      "placeholder": "/absolute/path/to/TradingAgents"
+    },
+    "pythonPath": {
+      "label": "Python Path",
+      "placeholder": "/absolute/path/to/.venv/bin/python"
+    },
+    "defaultPreset": {
+      "label": "Default Preset"
+    },
+    "defaultAnalysts": {
+      "label": "Default Analysts"
+    },
+    "timeoutMs": {
+      "label": "Timeout (ms)",
+      "placeholder": "600000"
+    }
+  }
+}
