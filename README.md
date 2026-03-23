@@ -117,6 +117,13 @@ Install the package and its dependencies:
 pip install .
 ```
 
+Or use `uv` to create a local virtualenv and sync dependencies from the lockfile:
+```bash
+uv venv --python 3.13 .venv
+source .venv/bin/activate
+uv sync --python .venv/bin/python
+```
+
 ### Required APIs
 
 TradingAgents supports multiple LLM providers. Set the API key for your chosen provider:
@@ -136,6 +143,49 @@ Alternatively, copy `.env.example` to `.env` and fill in your keys:
 ```bash
 cp .env.example .env
 ```
+
+### OpenAI-Compatible Providers (Bailian)
+
+This fork adds a local runner for OpenAI-compatible providers such as Bailian. You can use either `OPENAI_*` variables directly or the `BAILIAN_*` aliases included in `.env.example`:
+
+```bash
+export BAILIAN_API_KEY=...
+export BAILIAN_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
+```
+
+Then run TradingAgents with a preset:
+
+```bash
+source .venv/bin/activate
+python run_bailian.py --preset balanced --ticker NVDA --date 2024-05-10
+```
+
+Available presets:
+
+- `balanced`: `qwen3.5-plus` / `qwen3-max-2026-01-23`
+- `fast`: `qwen3.5-plus` / `qwen3.5-plus`
+- `coder`: `qwen3-coder-plus` / `qwen3-coder-next`
+- `glm`: `glm-4.7` / `glm-5`
+- `kimi`: `kimi-k2.5` / `kimi-k2.5`
+
+For tool integrations, use structured JSON output:
+
+```bash
+python run_bailian.py --json --preset fast --analysts market,news --ticker NVDA --date 2024-05-10
+```
+
+The JSON response includes:
+
+- `ok`
+- `tool`
+- `input`
+- `result.rating`
+- `result.summary`
+- `result.decision`
+- `result.reports`
+- `result.artifacts.log_path`
+- `error`
+- `meta.elapsed_seconds`
 
 ### CLI Usage
 
@@ -159,6 +209,70 @@ An interface will appear showing results as they load, letting you track the age
 <p align="center">
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
+
+### Non-Interactive Local Runner
+
+This fork also includes a non-interactive runner for local scripting and automation:
+
+```bash
+source .venv/bin/activate
+python run_analysis.py
+```
+
+`run_analysis.py` reads runtime options from `.env`, including:
+
+- `TRADINGAGENTS_TICKER`
+- `TRADINGAGENTS_ANALYSIS_DATE`
+- `TRADINGAGENTS_ANALYSTS`
+- `TRADINGAGENTS_QUICK_THINK_LLM`
+- `TRADINGAGENTS_DEEP_THINK_LLM`
+- `TRADINGAGENTS_MAX_DEBATE_ROUNDS`
+- `TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS`
+- `TRADINGAGENTS_MAX_RECUR_LIMIT`
+
+Logs are written to:
+
+```text
+eval_results/<TICKER>/TradingAgentsStrategy_logs/full_states_log_<DATE>.json
+```
+
+### OpenClaw Integration
+
+This fork includes a minimal OpenClaw plugin and a workspace skill:
+
+- Plugin: `.openclaw/extensions/tradingagents-bailian/`
+- Skill: `skills/tradingagents-bailian/`
+- Plugin tool name: `run_tradingagents`
+
+The plugin wraps:
+
+```bash
+python run_bailian.py --json ...
+```
+
+A minimal OpenClaw config looks like:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "tradingagents-bailian": {
+        "enabled": true,
+        "config": {
+          "repoPath": "/absolute/path/to/TradingAgents",
+          "pythonPath": "/absolute/path/to/TradingAgents/.venv/bin/python",
+          "defaultPreset": "fast",
+          "defaultAnalysts": ["market", "news"],
+          "timeoutMs": 600000
+        }
+      }
+    }
+  },
+  "tools": {
+    "allow": ["tradingagents-bailian"]
+  }
+}
+```
 
 ## TradingAgents Package
 
