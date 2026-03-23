@@ -155,6 +155,14 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        timeout = self.config.get("llm_timeout_seconds")
+        if isinstance(timeout, (int, float)) and timeout > 0:
+            kwargs["timeout"] = float(timeout)
+
+        max_retries = self.config.get("llm_max_retries")
+        if isinstance(max_retries, int) and max_retries >= 0:
+            kwargs["max_retries"] = max_retries
+
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:

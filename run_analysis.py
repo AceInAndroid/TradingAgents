@@ -1,4 +1,5 @@
 import os
+import socket
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -55,6 +56,13 @@ def build_runtime_config() -> Dict[str, Any]:
         "TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS", 1
     )
     config["max_recur_limit"] = _get_int("TRADINGAGENTS_MAX_RECUR_LIMIT", 30)
+    config["llm_timeout_seconds"] = float(
+        os.getenv("TRADINGAGENTS_LLM_TIMEOUT_SECONDS", "180")
+    )
+    config["llm_max_retries"] = _get_int("TRADINGAGENTS_LLM_MAX_RETRIES", 1)
+    config["http_timeout_seconds"] = float(
+        os.getenv("TRADINGAGENTS_HTTP_TIMEOUT_SECONDS", "45")
+    )
     return config
 
 
@@ -64,6 +72,11 @@ def run_analysis() -> Dict[str, Any]:
     ticker = os.getenv("TRADINGAGENTS_TICKER", "NVDA")
     analysis_date = os.getenv("TRADINGAGENTS_ANALYSIS_DATE", "2024-05-10")
     debug = _get_bool("TRADINGAGENTS_DEBUG", False)
+
+    # Guard all external blocking I/O, including Yahoo data/news requests.
+    http_timeout = config.get("http_timeout_seconds")
+    if isinstance(http_timeout, (int, float)) and http_timeout > 0:
+        socket.setdefaulttimeout(float(http_timeout))
 
     ta = TradingAgentsGraph(
         selected_analysts=analysts,

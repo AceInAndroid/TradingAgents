@@ -1,6 +1,8 @@
-from langchain_core.messages import AIMessage
-import time
-import json
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_argument,
+    compact_debate_history,
+)
 
 
 def create_conservative_debator(llm):
@@ -17,25 +19,54 @@ def create_conservative_debator(llm):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
 
-        trader_decision = state["trader_investment_plan"]
+        trader_decision = compact_argument(
+            state["trader_investment_plan"], max_chars=900
+        )
+        research_brief = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+            market_max_chars=480,
+            sentiment_max_chars=220,
+            news_max_chars=360,
+            fundamentals_max_chars=240,
+        )
+        history = compact_debate_history(history, max_chars=650)
+        current_aggressive_response = compact_argument(
+            current_aggressive_response, max_chars=320
+        )
+        current_neutral_response = compact_argument(
+            current_neutral_response, max_chars=320
+        )
 
-        prompt = f"""As the Conservative Risk Analyst, your primary objective is to protect assets, minimize volatility, and ensure steady, reliable growth. You prioritize stability, security, and risk mitigation, carefully assessing potential losses, economic downturns, and market volatility. When evaluating the trader's decision or plan, critically examine high-risk elements, pointing out where the decision may expose the firm to undue risk and where more cautious alternatives could secure long-term gains. Here is the trader's decision:
+        prompt = f"""You are the Conservative Risk Analyst. Stress drawdown control, downside asymmetry, and capital preservation. Challenge aggressive assumptions and point out where the trader's proposal lacks margin of safety.
 
+Trader proposal:
 {trader_decision}
 
-Your task is to actively counter the arguments of the Aggressive and Neutral Analysts, highlighting where their views may overlook potential threats or fail to prioritize sustainability. Respond directly to their points, drawing from the following data sources to build a convincing case for a low-risk approach adjustment to the trader's decision:
+Compact research brief:
+{research_brief}
 
-Market Research Report: {market_research_report}
-Social Media Sentiment Report: {sentiment_report}
-Latest World Affairs Report: {news_report}
-Company Fundamentals Report: {fundamentals_report}
-Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
+Debate history:
+{history}
 
-Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting."""
+Latest aggressive argument:
+{current_aggressive_response}
+
+Latest neutral argument:
+{current_neutral_response}
+
+Requirements:
+- Focus on 2-3 decisive downside or execution risks.
+- Challenge weak assumptions from the other analysts directly.
+- Suggest safer positioning, sizing, or trigger conditions when relevant.
+- Max 150 words, with up to 2 short bullets if useful.
+- Plain conversational text only."""
 
         response = llm.invoke(prompt)
 
-        argument = f"Conservative Analyst: {response.content}"
+        argument = f"Conservative Analyst: {compact_argument(response.content, max_chars=700)}"
 
         new_risk_debate_state = {
             "history": history + "\n" + argument,

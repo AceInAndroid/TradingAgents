@@ -1,6 +1,12 @@
 from langchain_core.messages import AIMessage
 import time
 import json
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_argument,
+    compact_debate_history,
+    compact_memory_recommendations,
+)
 
 
 def create_bear_researcher(llm, memory):
@@ -15,12 +21,18 @@ def create_bear_researcher(llm, memory):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+        )
         past_memories = memory.get_memories(curr_situation, n_matches=2)
-
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+        past_memory_str = compact_memory_recommendations(
+            rec["recommendation"] for rec in past_memories
+        )
+        history = compact_debate_history(history)
+        current_response = compact_argument(current_response)
 
         prompt = f"""You are a Bear Analyst making the case against investing in the stock. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
 
@@ -31,13 +43,11 @@ Key points to focus on:
 - Negative Indicators: Use evidence from financial data, market trends, or recent adverse news to support your position.
 - Bull Counterpoints: Critically analyze the bull argument with specific data and sound reasoning, exposing weaknesses or over-optimistic assumptions.
 - Engagement: Present your argument in a conversational style, directly engaging with the bull analyst's points and debating effectively rather than simply listing facts.
+- Keep your response tight: max 220 words, plus up to 4 short bullets if needed.
 
 Resources available:
-
-Market research report: {market_research_report}
-Social media sentiment report: {sentiment_report}
-Latest world affairs news: {news_report}
-Company fundamentals report: {fundamentals_report}
+Research brief:
+{curr_situation}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}
@@ -46,7 +56,7 @@ Use this information to deliver a compelling bear argument, refute the bull's cl
 
         response = llm.invoke(prompt)
 
-        argument = f"Bear Analyst: {response.content}"
+        argument = f"Bear Analyst: {compact_argument(response.content, max_chars=1200)}"
 
         new_investment_debate_state = {
             "history": history + "\n" + argument,

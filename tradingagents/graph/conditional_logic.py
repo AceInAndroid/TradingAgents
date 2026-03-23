@@ -1,6 +1,7 @@
 # TradingAgents/graph/conditional_logic.py
 
 from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.agents.utils.market_compaction import infer_market
 
 
 class ConditionalLogic:
@@ -56,6 +57,10 @@ class ConditionalLogic:
 
     def should_continue_risk_analysis(self, state: AgentState) -> str:
         """Determine if risk analysis should continue."""
+        if infer_market(state["company_of_interest"]) == "HK":
+            if state["risk_debate_state"]["count"] >= 1:
+                return "Portfolio Manager"
+            return "Neutral Analyst"
         if (
             state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds
         ):  # 3 rounds of back-and-forth between 3 agents

@@ -2,6 +2,12 @@ import time
 import json
 
 from tradingagents.agents.utils.agent_utils import build_instrument_context
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_debate_history,
+    compact_generated_report,
+    compact_memory_recommendations,
+)
 
 
 def create_research_manager(llm, memory):
@@ -15,12 +21,17 @@ def create_research_manager(llm, memory):
 
         investment_debate_state = state["investment_debate_state"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+        )
         past_memories = memory.get_memories(curr_situation, n_matches=2)
-
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+        past_memory_str = compact_memory_recommendations(
+            rec["recommendation"] for rec in past_memories
+        )
+        history = compact_debate_history(history, max_chars=1600)
 
         prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
 
@@ -32,29 +43,34 @@ Your Recommendation: A decisive stance supported by the most convincing argument
 Rationale: An explanation of why these arguments lead to your conclusion.
 Strategic Actions: Concrete steps for implementing the recommendation.
 Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
+Keep the response tight: max 260 words.
 
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
 
 {instrument_context}
 
+Here is the compact research brief:
+{curr_situation}
+
 Here is the debate:
 Debate History:
 {history}"""
         response = llm.invoke(prompt)
+        response_text = compact_generated_report(response.content, max_chars=1500)
 
         new_investment_debate_state = {
-            "judge_decision": response.content,
+            "judge_decision": response_text,
             "history": investment_debate_state.get("history", ""),
             "bear_history": investment_debate_state.get("bear_history", ""),
             "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": response.content,
+            "current_response": response_text,
             "count": investment_debate_state["count"],
         }
 
         return {
             "investment_debate_state": new_investment_debate_state,
-            "investment_plan": response.content,
+            "investment_plan": response_text,
         }
 
     return research_manager_node

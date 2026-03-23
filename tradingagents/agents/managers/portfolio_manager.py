@@ -1,5 +1,11 @@
 from tradingagents.agents.utils.agent_utils import build_instrument_context
-
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_argument,
+    compact_debate_history,
+    compact_generated_report,
+    compact_memory_recommendations,
+)
 
 def create_portfolio_manager(llm, memory):
     def portfolio_manager_node(state) -> dict:
@@ -14,49 +20,60 @@ def create_portfolio_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         trader_plan = state["investment_plan"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+            market_max_chars=520,
+            sentiment_max_chars=220,
+            news_max_chars=380,
+            fundamentals_max_chars=260,
+        )
         past_memories = memory.get_memories(curr_situation, n_matches=2)
-
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+        past_memory_str = compact_memory_recommendations(
+            (rec["recommendation"] for rec in past_memories),
+            per_item_chars=260,
+        )
+        history = compact_debate_history(history, max_chars=900)
+        trader_plan = compact_argument(trader_plan, max_chars=650)
 
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
 
----
+Use exactly one rating: Buy, Overweight, Hold, Underweight, or Sell.
 
-**Rating Scale** (use exactly one):
-- **Buy**: Strong conviction to enter or add to position
-- **Overweight**: Favorable outlook, gradually increase exposure
-- **Hold**: Maintain current position, no action needed
-- **Underweight**: Reduce exposure, take partial profits
-- **Sell**: Exit position or avoid entry
+Trader's proposed plan:
+{trader_plan}
 
-**Context:**
-- Trader's proposed plan: **{trader_plan}**
-- Lessons from past decisions: **{past_memory_str}**
+Compact research brief:
+{curr_situation}
 
-**Required Output Structure:**
-1. **Rating**: State one of Buy / Overweight / Hold / Underweight / Sell.
-2. **Executive Summary**: A concise action plan covering entry strategy, position sizing, key risk levels, and time horizon.
-3. **Investment Thesis**: Detailed reasoning anchored in the analysts' debate and past reflections.
+Lessons from similar situations:
+{past_memory_str}
 
----
-
-**Risk Analysts Debate History:**
+Risk analysts debate history:
 {history}
 
----
+Requirements:
+- Be decisive. Hold only if strongly justified.
+- Ground the call in the strongest evidence from the debate and research brief.
+- Cover entry or exposure, sizing, key invalidation/risk level, and time horizon.
+- Max 220 words.
+- Plain text only.
 
-Be decisive and ground every conclusion in specific evidence from the analysts."""
+Output sections:
+Rating:
+Executive Summary:
+Investment Thesis:"""
 
         response = llm.invoke(prompt)
+        response_text = compact_generated_report(response.content, max_chars=1100)
 
         new_risk_debate_state = {
-            "judge_decision": response.content,
-            "history": risk_debate_state["history"],
+            "judge_decision": response_text,
+            "history": history,
             "aggressive_history": risk_debate_state["aggressive_history"],
             "conservative_history": risk_debate_state["conservative_history"],
             "neutral_history": risk_debate_state["neutral_history"],
@@ -69,7 +86,7 @@ Be decisive and ground every conclusion in specific evidence from the analysts."
 
         return {
             "risk_debate_state": new_risk_debate_state,
-            "final_trade_decision": response.content,
+            "final_trade_decision": response_text,
         }
 
     return portfolio_manager_node

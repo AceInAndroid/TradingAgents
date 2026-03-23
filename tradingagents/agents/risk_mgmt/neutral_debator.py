@@ -1,5 +1,8 @@
-import time
-import json
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_argument,
+    compact_debate_history,
+)
 
 
 def create_neutral_debator(llm):
@@ -16,25 +19,54 @@ def create_neutral_debator(llm):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
 
-        trader_decision = state["trader_investment_plan"]
+        trader_decision = compact_argument(
+            state["trader_investment_plan"], max_chars=900
+        )
+        research_brief = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+            market_max_chars=480,
+            sentiment_max_chars=220,
+            news_max_chars=360,
+            fundamentals_max_chars=240,
+        )
+        history = compact_debate_history(history, max_chars=650)
+        current_aggressive_response = compact_argument(
+            current_aggressive_response, max_chars=320
+        )
+        current_conservative_response = compact_argument(
+            current_conservative_response, max_chars=320
+        )
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
+        prompt = f"""You are the Neutral Risk Analyst. Balance upside and downside, reconcile the strongest points from both sides, and push toward a practical risk-adjusted stance.
 
+Trader proposal:
 {trader_decision}
 
-Your task is to challenge both the Aggressive and Conservative Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
+Compact research brief:
+{research_brief}
 
-Market Research Report: {market_research_report}
-Social Media Sentiment Report: {sentiment_report}
-Latest World Affairs Report: {news_report}
-Company Fundamentals Report: {fundamentals_report}
-Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the conservative analyst: {current_conservative_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
+Debate history:
+{history}
 
-Engage actively by analyzing both sides critically, addressing weaknesses in the aggressive and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
+Latest aggressive argument:
+{current_aggressive_response}
+
+Latest conservative argument:
+{current_conservative_response}
+
+Requirements:
+- Identify the 1-2 strongest upside factors and 1-2 strongest risks.
+- Point out where aggressive or conservative takes overreach.
+- End with a balanced risk posture or conditional plan.
+- Max 150 words, with up to 2 short bullets if useful.
+- Plain conversational text only."""
 
         response = llm.invoke(prompt)
 
-        argument = f"Neutral Analyst: {response.content}"
+        argument = f"Neutral Analyst: {compact_argument(response.content, max_chars=700)}"
 
         new_risk_debate_state = {
             "history": history + "\n" + argument,
