@@ -40,6 +40,7 @@ MODEL_PRESETS: Dict[str, Dict[str, str]] = {
 }
 
 TOOL_NAME = "run_tradingagents"
+JD_OPENAI_BASE_URL_FRAGMENT = "modelservice.jdcloud.com/coding/openai/v1"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -51,6 +52,12 @@ def _parse_args() -> argparse.Namespace:
         choices=sorted(MODEL_PRESETS),
         default=os.getenv("TRADINGAGENTS_MODEL_PRESET", "balanced"),
         help="Model preset to use.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "graph", "shallow"],
+        default=os.getenv("TRADINGAGENTS_RUN_MODE", "auto"),
+        help="Execution mode. auto prefers shallow research on constrained providers.",
     )
     parser.add_argument("--ticker", default=os.getenv("TRADINGAGENTS_TICKER", "NVDA"))
     parser.add_argument(
@@ -68,12 +75,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--quick-model",
-        default=os.getenv("TRADINGAGENTS_QUICK_THINK_LLM"),
+        default=None,
         help="Override quick-think model.",
     )
     parser.add_argument(
         "--deep-model",
-        default=os.getenv("TRADINGAGENTS_DEEP_THINK_LLM"),
+        default=None,
         help="Override deep-think model.",
     )
     parser.add_argument(
@@ -144,26 +151,67 @@ def _resolve_api_env() -> None:
     os.environ.setdefault("TRADINGAGENTS_LLM_PROVIDER", "openai")
 
 
-def _apply_runtime_env(args: argparse.Namespace) -> Dict[str, str]:
+def _is_jd_openai_base_url(base_url: str) -> bool:
+    return JD_OPENAI_BASE_URL_FRAGMENT in str(base_url or "").lower()
+
+
+def _resolve_model_profile(args: argparse.Namespace) -> Dict[str, str]:
+    base_url = os.environ["OPENAI_BASE_URL"]
     preset = MODEL_PRESETS[args.preset]
     quick_model = args.quick_model or preset["quick"]
     deep_model = args.deep_model or preset["deep"]
 
+    # JD coding/openai endpoint currently only accepts the exact `GLM-5`
+    # model id in this account context. Avoid unsupported qwen/glm aliases.
+    if _is_jd_openai_base_url(base_url):
+        quick_model = args.quick_model or "GLM-5"
+        deep_model = args.deep_model or "GLM-5"
+
+    return {
+        "base_url": base_url,
+        "quick_model": quick_model,
+        "deep_model": deep_model,
+    }
+
+
+def _apply_runtime_env(args: argparse.Namespace) -> Dict[str, str]:
+    profile = _resolve_model_profile(args)
+    quick_model = profile["quick_model"]
+    deep_model = profile["deep_model"]
+
+    llm_timeout = args.llm_timeout
+    llm_max_retries = args.llm_max_retries
+    http_timeout = args.http_timeout
+    debate_rounds = args.debate_rounds
+    risk_rounds = args.risk_rounds
+    recur_limit = args.recur_limit
+
+    # Use a more conservative profile on JD GLM to avoid repeated provider
+    # failures and token-per-minute spikes from the full TradingAgents graph.
+    if _is_jd_openai_base_url(profile["base_url"]):
+        llm_timeout = min(llm_timeout, 60.0)
+        llm_max_retries = min(llm_max_retries, 0)
+        http_timeout = min(http_timeout, 15.0)
+        debate_rounds = min(debate_rounds, 1)
+        risk_rounds = min(risk_rounds, 1)
+        recur_limit = min(recur_limit, 12)
+
     effective = {
         "provider": "openai",
-        "base_url": os.environ["OPENAI_BASE_URL"],
+        "base_url": profile["base_url"],
         "preset": args.preset,
+        "mode": args.mode,
         "quick_model": quick_model,
         "deep_model": deep_model,
         "ticker": args.ticker,
         "analysis_date": args.analysis_date,
         "analysts": args.analysts,
-        "max_debate_rounds": str(args.debate_rounds),
-        "max_risk_discuss_rounds": str(args.risk_rounds),
-        "max_recur_limit": str(args.recur_limit),
-        "llm_timeout_seconds": str(args.llm_timeout),
-        "llm_max_retries": str(args.llm_max_retries),
-        "http_timeout_seconds": str(args.http_timeout),
+        "max_debate_rounds": str(debate_rounds),
+        "max_risk_discuss_rounds": str(risk_rounds),
+        "max_recur_limit": str(recur_limit),
+        "llm_timeout_seconds": str(llm_timeout),
+        "llm_max_retries": str(llm_max_retries),
+        "http_timeout_seconds": str(http_timeout),
         "debug": str(args.debug).lower(),
     }
 
@@ -173,12 +221,12 @@ def _apply_runtime_env(args: argparse.Namespace) -> Dict[str, str]:
     os.environ["TRADINGAGENTS_TICKER"] = args.ticker
     os.environ["TRADINGAGENTS_ANALYSIS_DATE"] = args.analysis_date
     os.environ["TRADINGAGENTS_ANALYSTS"] = args.analysts
-    os.environ["TRADINGAGENTS_MAX_DEBATE_ROUNDS"] = str(args.debate_rounds)
-    os.environ["TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS"] = str(args.risk_rounds)
-    os.environ["TRADINGAGENTS_MAX_RECUR_LIMIT"] = str(args.recur_limit)
-    os.environ["TRADINGAGENTS_LLM_TIMEOUT_SECONDS"] = str(args.llm_timeout)
-    os.environ["TRADINGAGENTS_LLM_MAX_RETRIES"] = str(args.llm_max_retries)
-    os.environ["TRADINGAGENTS_HTTP_TIMEOUT_SECONDS"] = str(args.http_timeout)
+    os.environ["TRADINGAGENTS_MAX_DEBATE_ROUNDS"] = str(debate_rounds)
+    os.environ["TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS"] = str(risk_rounds)
+    os.environ["TRADINGAGENTS_MAX_RECUR_LIMIT"] = str(recur_limit)
+    os.environ["TRADINGAGENTS_LLM_TIMEOUT_SECONDS"] = str(llm_timeout)
+    os.environ["TRADINGAGENTS_LLM_MAX_RETRIES"] = str(llm_max_retries)
+    os.environ["TRADINGAGENTS_HTTP_TIMEOUT_SECONDS"] = str(http_timeout)
     os.environ["TRADINGAGENTS_DEBUG"] = str(args.debug).lower()
 
     return effective
@@ -220,6 +268,7 @@ def _build_tool_success_payload(
             "ticker": effective["ticker"],
             "analysis_date": effective["analysis_date"],
             "preset": effective["preset"],
+            "mode": effective["mode"],
             "analysts": [item.strip() for item in effective["analysts"].split(",") if item.strip()],
         },
         "result": {
@@ -235,6 +284,7 @@ def _build_tool_success_payload(
             "reports": _compact_reports(result["reports"]),
             "artifacts": {
                 "log_path": result["log_path"],
+                "mode": result.get("mode", effective["mode"]),
             },
         },
         "meta": {
@@ -255,6 +305,9 @@ def _classify_error(exc: BaseException) -> tuple[int, str]:
     if "alpha_vantage" in message or "yfinance" in message or "ticker" in message:
         return 4, "data_error"
 
+    if "rate_limit" in message or "tpm limit" in message or "model not found" in message or "valid services" in message:
+        return 5, "provider_error"
+
     return 3, "runtime_error"
 
 
@@ -270,6 +323,7 @@ def _build_tool_error_payload(
             "ticker": effective["ticker"],
             "analysis_date": effective["analysis_date"],
             "preset": effective["preset"],
+            "mode": effective["mode"],
             "analysts": [item.strip() for item in effective["analysts"].split(",") if item.strip()],
         }
 
@@ -303,9 +357,16 @@ def main() -> None:
             print(json.dumps(effective, indent=2, ensure_ascii=False))
             return
 
-        from run_analysis import run_analysis
+        from run_analysis import run_analysis, run_shallow_analysis
 
-        result = run_analysis()
+        run_mode = args.mode
+        if run_mode == "auto" and _is_jd_openai_base_url(effective["base_url"]):
+            run_mode = "shallow"
+
+        if run_mode == "shallow":
+            result = run_shallow_analysis()
+        else:
+            result = run_analysis()
         if args.json:
             payload = _build_tool_success_payload(
                 effective,
