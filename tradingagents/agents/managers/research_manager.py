@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
-from tradingagents.agents.utils.agent_utils import build_instrument_context
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+)
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_debate_history,
+    compact_generated_report,
+)
 from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
@@ -16,8 +24,28 @@ def create_research_manager(llm):
     def research_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["investment_debate_state"].get("history", "")
+        market_research_report = state["market_report"]
+        sentiment_report = state["sentiment_report"]
+        news_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
 
         investment_debate_state = state["investment_debate_state"]
+        research_brief = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+        )
+        history = compact_debate_history(history, max_chars=1600)
+        past_context = compact_generated_report(
+            state.get("past_context", ""),
+            max_chars=500,
+        )
+        lessons_block = (
+            f"\nPast lessons from prior decisions:\n{past_context}\n"
+            if past_context
+            else ""
+        )
 
         prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
 
@@ -36,8 +64,13 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 
 ---
 
+**Compact Research Brief:**
+{research_brief}
+{lessons_block}
 **Debate History:**
-{history}"""
+{history}
+
+Keep the response tight: max 260 words.{get_language_instruction()}"""
 
         investment_plan = invoke_structured_or_freetext(
             structured_llm,

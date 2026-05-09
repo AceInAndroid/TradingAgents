@@ -92,6 +92,24 @@ def _parse_args() -> argparse.Namespace:
         default=int(os.getenv("TRADINGAGENTS_MAX_RECUR_LIMIT", "30")),
     )
     parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=float(os.getenv("TRADINGAGENTS_LLM_TIMEOUT_SECONDS", "180")),
+        help="LLM request timeout in seconds.",
+    )
+    parser.add_argument(
+        "--llm-max-retries",
+        type=int,
+        default=int(os.getenv("TRADINGAGENTS_LLM_MAX_RETRIES", "1")),
+        help="Maximum LLM retry attempts.",
+    )
+    parser.add_argument(
+        "--http-timeout",
+        type=float,
+        default=float(os.getenv("TRADINGAGENTS_HTTP_TIMEOUT_SECONDS", "45")),
+        help="Socket-level timeout for external HTTP requests in seconds.",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         default=os.getenv("TRADINGAGENTS_DEBUG", "false").lower()
@@ -143,6 +161,9 @@ def _apply_runtime_env(args: argparse.Namespace) -> Dict[str, str]:
         "max_debate_rounds": str(args.debate_rounds),
         "max_risk_discuss_rounds": str(args.risk_rounds),
         "max_recur_limit": str(args.recur_limit),
+        "llm_timeout_seconds": str(args.llm_timeout),
+        "llm_max_retries": str(args.llm_max_retries),
+        "http_timeout_seconds": str(args.http_timeout),
         "debug": str(args.debug).lower(),
     }
 
@@ -155,6 +176,9 @@ def _apply_runtime_env(args: argparse.Namespace) -> Dict[str, str]:
     os.environ["TRADINGAGENTS_MAX_DEBATE_ROUNDS"] = str(args.debate_rounds)
     os.environ["TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS"] = str(args.risk_rounds)
     os.environ["TRADINGAGENTS_MAX_RECUR_LIMIT"] = str(args.recur_limit)
+    os.environ["TRADINGAGENTS_LLM_TIMEOUT_SECONDS"] = str(args.llm_timeout)
+    os.environ["TRADINGAGENTS_LLM_MAX_RETRIES"] = str(args.llm_max_retries)
+    os.environ["TRADINGAGENTS_HTTP_TIMEOUT_SECONDS"] = str(args.http_timeout)
     os.environ["TRADINGAGENTS_DEBUG"] = str(args.debug).lower()
 
     return effective

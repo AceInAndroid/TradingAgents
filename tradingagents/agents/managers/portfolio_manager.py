@@ -15,6 +15,12 @@ from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
+from tradingagents.agents.utils.market_compaction import (
+    build_compact_research_context,
+    compact_argument,
+    compact_debate_history,
+    compact_generated_report,
+)
 from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
@@ -31,11 +37,30 @@ def create_portfolio_manager(llm):
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+        market_research_report = state["market_report"]
+        sentiment_report = state["sentiment_report"]
+        news_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
+
+        research_brief = build_compact_research_context(
+            market_report=market_research_report,
+            sentiment_report=sentiment_report,
+            news_report=news_report,
+            fundamentals_report=fundamentals_report,
+            market_max_chars=520,
+            sentiment_max_chars=220,
+            news_max_chars=380,
+            fundamentals_max_chars=260,
+        )
+        history = compact_debate_history(history, max_chars=900)
+        research_plan = compact_argument(research_plan, max_chars=700)
+        trader_plan = compact_argument(trader_plan, max_chars=650)
 
         past_context = state.get("past_context", "")
+        compact_lessons = compact_generated_report(past_context, max_chars=500)
         lessons_line = (
-            f"- Lessons from prior decisions and outcomes:\n{past_context}\n"
-            if past_context
+            f"- Lessons from prior decisions and outcomes:\n{compact_lessons}\n"
+            if compact_lessons
             else ""
         )
 
@@ -55,13 +80,15 @@ def create_portfolio_manager(llm):
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
+- Compact research brief: **{research_brief}**
 {lessons_line}
 **Risk Analysts Debate History:**
 {history}
 
 ---
 
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts.
+Keep the response tight: max 220 words.{get_language_instruction()}"""
 
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,
