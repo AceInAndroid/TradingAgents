@@ -1,9 +1,8 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import time
-import json
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_indicators,
+    get_language_instruction,
     get_stock_data,
 )
 from tradingagents.agents.utils.market_compaction import compact_generated_report
@@ -46,15 +45,17 @@ Volatility Indicators:
 Volume-Based Indicators:
 - vwma: VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses.
 
-        - Strict tool budget: call get_stock_data exactly once, then call get_indicators only for the few indicators that change your conclusion.
-        - Hard cap: use at most 4 indicators for `.HK` tickers, at most 5 indicators for other tickers.
-        - Avoid redundant pairs unless they directly confirm each other. Prefer one momentum indicator, one trend indicator, one volatility indicator, and one volume indicator at most.
-        - The tools already return compact summaries. Do not ask for long lookback windows unless absolutely necessary.
-        - When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail.
-        - Please make sure to call get_stock_data first, then use get_indicators with the specific indicator names.
-        - Keep the report tight: max 250 words before the final Markdown table.
-        - Prioritize actionable conclusions over repeating raw tool output."""
+- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi).
+- Strict tool budget: call get_stock_data exactly once, then call get_indicators only for the few indicators that change your conclusion.
+- Hard cap: use at most 4 indicators for `.HK` tickers, at most 5 indicators for other tickers.
+- Prefer one momentum indicator, one trend indicator, one volatility indicator, and one volume indicator at most.
+- The tools already return compact summaries. Do not ask for long lookback windows unless absolutely necessary.
+- When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail.
+- Please make sure to call get_stock_data first, then use get_indicators with the specific indicator names.
+- Keep the report tight: max 250 words before the final Markdown table.
+- Prioritize actionable conclusions over repeating raw tool output."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + get_language_instruction()
         )
 
         prompt = ChatPromptTemplate.from_messages(

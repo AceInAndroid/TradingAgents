@@ -1,5 +1,9 @@
 from langchain_core.tools import tool
 from typing import Annotated
+from tradingagents.agents.utils.market_compaction import (
+    cap_history_start,
+    compact_stock_data,
+)
 from tradingagents.dataflows.interface import route_to_vendor
 from tradingagents.agents.utils.market_compaction import cap_history_start, compact_stock_data
 

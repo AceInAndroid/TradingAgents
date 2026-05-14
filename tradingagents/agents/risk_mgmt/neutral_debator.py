@@ -1,3 +1,4 @@
+
 from tradingagents.agents.utils.market_compaction import (
     build_compact_research_context,
     compact_argument,

@@ -67,7 +67,9 @@ def compact_stock_data(
     if df.empty:
         return _truncate(raw, 2200)
 
-    numeric_cols = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in df.columns]
+    numeric_cols = [
+        col for col in ["Open", "High", "Low", "Close", "Volume"] if col in df.columns
+    ]
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -88,7 +90,11 @@ def compact_stock_data(
         if col in recent.columns:
             recent[col] = recent[col].round(2)
 
-    table_cols = [col for col in ["Date", "Open", "High", "Low", "Close", "Volume"] if col in recent.columns]
+    table_cols = [
+        col
+        for col in ["Date", "Open", "High", "Low", "Close", "Volume"]
+        if col in recent.columns
+    ]
     recent_table = recent[table_cols].to_csv(index=False)
 
     lines = [
@@ -124,7 +130,11 @@ def compact_indicator_output(
     if not observations:
         return _truncate(raw, 1200)
 
-    valid_points = [(date_str, value) for date_str, value in observations if isinstance(value, float)]
+    valid_points = [
+        (date_str, value)
+        for date_str, value in observations
+        if isinstance(value, float)
+    ]
     recent_points = observations[:max_points]
 
     latest_valid = valid_points[0] if valid_points else None
@@ -198,7 +208,9 @@ def compact_global_news(
         return _truncate(raw, 2200)
 
     selected = articles[:max_articles]
-    start_date = (datetime.strptime(curr_date, "%Y-%m-%d") - timedelta(days=look_back_days)).strftime("%Y-%m-%d")
+    start_date = (
+        datetime.strptime(curr_date, "%Y-%m-%d") - timedelta(days=look_back_days)
+    ).strftime("%Y-%m-%d")
     lines = [
         "## Compact global market news summary",
         f"Date range: {start_date} to {curr_date}",
@@ -260,7 +272,9 @@ def compact_argument(argument: str, max_chars: int = 700) -> str:
     return compact_generated_report(argument, max_chars=max_chars)
 
 
-def compact_memory_recommendations(recommendations: Iterable[str], per_item_chars: int = 420) -> str:
+def compact_memory_recommendations(
+    recommendations: Iterable[str], per_item_chars: int = 420
+) -> str:
     items = []
     for index, recommendation in enumerate(recommendations, start=1):
         text = compact_generated_report(recommendation, max_chars=per_item_chars)

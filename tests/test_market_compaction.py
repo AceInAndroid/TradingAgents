@@ -24,7 +24,13 @@ Date,Open,High,Low,Close,Volume
 2026-03-20,75.7,77.3,71.0,71.6,26124893
 2026-03-23,71.8,72.4,70.9,72.1,12000000
 """
-    compact = compact_stock_data("9868.HK", "2025-09-23", "2026-01-22", "2026-03-23", raw)
+    compact = compact_stock_data(
+        "9868.HK",
+        "2025-09-23",
+        "2026-01-22",
+        "2026-03-23",
+        raw,
+    )
     assert "Compact stock snapshot for 9868.HK" in compact
     assert "Requested window: 2025-09-23 to 2026-03-23" in compact
     assert "Recent trading days" in compact

@@ -1,26 +1,48 @@
-from tradingagents.agents.utils.agent_utils import build_instrument_context
+"""Portfolio Manager: synthesises the risk-analyst debate into the final decision.
+
+Uses LangChain's ``with_structured_output`` so the LLM produces a typed
+``PortfolioDecision`` directly, in a single call.  The result is rendered
+back to markdown for storage in ``final_trade_decision`` so memory log,
+CLI display, and saved reports continue to consume the same shape they do
+today.  When a provider does not expose structured output, the agent falls
+back gracefully to free-text generation.
+"""
+
+from __future__ import annotations
+
+from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+)
 from tradingagents.agents.utils.market_compaction import (
     build_compact_research_context,
     compact_argument,
     compact_debate_history,
     compact_generated_report,
-    compact_memory_recommendations,
+)
+from tradingagents.agents.utils.structured import (
+    bind_structured,
+    invoke_structured_or_freetext,
 )
 
-def create_portfolio_manager(llm, memory):
-    def portfolio_manager_node(state) -> dict:
 
+def create_portfolio_manager(llm):
+    structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
+
+    def portfolio_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
 
         history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
+        research_plan = state["investment_plan"]
+        trader_plan = state["trader_investment_plan"]
         market_research_report = state["market_report"]
+        sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
-        sentiment_report = state["sentiment_report"]
-        trader_plan = state["investment_plan"]
 
-        curr_situation = build_compact_research_context(
+        research_brief = build_compact_research_context(
             market_report=market_research_report,
             sentiment_report=sentiment_report,
             news_report=news_report,
@@ -30,50 +52,55 @@ def create_portfolio_manager(llm, memory):
             news_max_chars=380,
             fundamentals_max_chars=260,
         )
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
-        past_memory_str = compact_memory_recommendations(
-            (rec["recommendation"] for rec in past_memories),
-            per_item_chars=260,
-        )
         history = compact_debate_history(history, max_chars=900)
+        research_plan = compact_argument(research_plan, max_chars=700)
         trader_plan = compact_argument(trader_plan, max_chars=650)
+
+        past_context = state.get("past_context", "")
+        compact_lessons = compact_generated_report(past_context, max_chars=500)
+        lessons_line = (
+            f"- Lessons from prior decisions and outcomes:\n{compact_lessons}\n"
+            if compact_lessons
+            else ""
+        )
 
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
 
-Use exactly one rating: Buy, Overweight, Hold, Underweight, or Sell.
+---
 
-Trader's proposed plan:
-{trader_plan}
+**Rating Scale** (use exactly one):
+- **Buy**: Strong conviction to enter or add to position
+- **Overweight**: Favorable outlook, gradually increase exposure
+- **Hold**: Maintain current position, no action needed
+- **Underweight**: Reduce exposure, take partial profits
+- **Sell**: Exit position or avoid entry
 
-Compact research brief:
-{curr_situation}
-
-Lessons from similar situations:
-{past_memory_str}
-
-Risk analysts debate history:
+**Context:**
+- Research Manager's investment plan: **{research_plan}**
+- Trader's transaction proposal: **{trader_plan}**
+- Compact research brief: **{research_brief}**
+{lessons_line}
+**Risk Analysts Debate History:**
 {history}
 
-Requirements:
-- Be decisive. Hold only if strongly justified.
-- Ground the call in the strongest evidence from the debate and research brief.
-- Cover entry or exposure, sizing, key invalidation/risk level, and time horizon.
-- Max 220 words.
-- Plain text only.
+---
 
-Output sections:
-Rating:
-Executive Summary:
-Investment Thesis:"""
+Be decisive and ground every conclusion in specific evidence from the analysts.
+Keep the response tight: max 220 words.{get_language_instruction()}"""
 
-        response = llm.invoke(prompt)
-        response_text = compact_generated_report(response.content, max_chars=1100)
+        final_trade_decision = invoke_structured_or_freetext(
+            structured_llm,
+            llm,
+            prompt,
+            render_pm_decision,
+            "Portfolio Manager",
+        )
 
         new_risk_debate_state = {
-            "judge_decision": response_text,
-            "history": history,
+            "judge_decision": final_trade_decision,
+            "history": risk_debate_state["history"],
             "aggressive_history": risk_debate_state["aggressive_history"],
             "conservative_history": risk_debate_state["conservative_history"],
             "neutral_history": risk_debate_state["neutral_history"],
@@ -86,7 +113,7 @@ Investment Thesis:"""
 
         return {
             "risk_debate_state": new_risk_debate_state,
-            "final_trade_decision": response_text,
+            "final_trade_decision": final_trade_decision,
         }
 
     return portfolio_manager_node

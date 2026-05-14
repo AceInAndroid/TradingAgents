@@ -1,15 +1,12 @@
-from langchain_core.messages import AIMessage
-import time
-import json
+
 from tradingagents.agents.utils.market_compaction import (
     build_compact_research_context,
     compact_argument,
     compact_debate_history,
-    compact_memory_recommendations,
 )
 
 
-def create_bear_researcher(llm, memory):
+def create_bear_researcher(llm):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
         history = investment_debate_state.get("history", "")
@@ -20,16 +17,11 @@ def create_bear_researcher(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
-
-        curr_situation = build_compact_research_context(
+        research_brief = build_compact_research_context(
             market_report=market_research_report,
             sentiment_report=sentiment_report,
             news_report=news_report,
             fundamentals_report=fundamentals_report,
-        )
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
-        past_memory_str = compact_memory_recommendations(
-            rec["recommendation"] for rec in past_memories
         )
         history = compact_debate_history(history)
         current_response = compact_argument(current_response)
@@ -47,11 +39,10 @@ Key points to focus on:
 
 Resources available:
 Research brief:
-{curr_situation}
+{research_brief}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
-Reflections from similar situations and lessons learned: {past_memory_str}
-Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock. You must also address reflections and learn from lessons and mistakes you made in the past.
+Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock.
 """
 
         response = llm.invoke(prompt)

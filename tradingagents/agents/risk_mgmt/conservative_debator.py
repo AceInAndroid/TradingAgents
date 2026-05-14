@@ -1,3 +1,4 @@
+
 from tradingagents.agents.utils.market_compaction import (
     build_compact_research_context,
     compact_argument,
@@ -66,7 +67,9 @@ Requirements:
 
         response = llm.invoke(prompt)
 
-        argument = f"Conservative Analyst: {compact_argument(response.content, max_chars=700)}"
+        argument = (
+            f"Conservative Analyst: {compact_argument(response.content, max_chars=700)}"
+        )
 
         new_risk_debate_state = {
             "history": history + "\n" + argument,

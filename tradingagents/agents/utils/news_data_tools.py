@@ -1,11 +1,12 @@
 from langchain_core.tools import tool
 from typing import Annotated
-from tradingagents.dataflows.interface import route_to_vendor
 from tradingagents.agents.utils.market_compaction import (
     compact_company_news,
     compact_global_news,
     infer_market,
 )
+from tradingagents.dataflows.interface import route_to_vendor
+
 
 @tool
 def get_news(
@@ -25,7 +26,13 @@ def get_news(
     """
     raw = route_to_vendor("get_news", ticker, start_date, end_date)
     max_articles = 4 if infer_market(ticker) == "HK" else 6
-    return compact_company_news(ticker, start_date, end_date, raw, max_articles=max_articles)
+    return compact_company_news(
+        ticker,
+        start_date,
+        end_date,
+        raw,
+        max_articles=max_articles,
+    )
 
 @tool
 def get_global_news(
@@ -44,8 +51,18 @@ def get_global_news(
         str: A formatted string containing global news data
     """
     effective_limit = max(2, min(limit, 3))
-    raw = route_to_vendor("get_global_news", curr_date, look_back_days, effective_limit)
-    return compact_global_news(curr_date, look_back_days, raw, max_articles=effective_limit)
+    raw = route_to_vendor(
+        "get_global_news",
+        curr_date,
+        look_back_days,
+        effective_limit,
+    )
+    return compact_global_news(
+        curr_date,
+        look_back_days,
+        raw,
+        max_articles=effective_limit,
+    )
 
 @tool
 def get_insider_transactions(

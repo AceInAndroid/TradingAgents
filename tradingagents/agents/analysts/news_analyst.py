@@ -1,9 +1,8 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import time
-import json
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_global_news,
+    get_language_instruction,
     get_news,
 )
 from tradingagents.agents.utils.market_compaction import compact_generated_report
@@ -27,6 +26,7 @@ def create_news_analyst(llm):
             " Write a detailed but concise report, prioritizing 3-5 major themes with evidence instead of exhaustive article-by-article repetition."
             " Keep the report tight: max 220 words before the final Markdown table."
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + get_language_instruction()
         )
 
         prompt = ChatPromptTemplate.from_messages(

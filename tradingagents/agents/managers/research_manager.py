@@ -1,16 +1,26 @@
-import time
-import json
+"""Research Manager: turns the bull/bear debate into a structured investment plan for the trader."""
 
-from tradingagents.agents.utils.agent_utils import build_instrument_context
+from __future__ import annotations
+
+from tradingagents.agents.schemas import ResearchPlan, render_research_plan
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+)
 from tradingagents.agents.utils.market_compaction import (
     build_compact_research_context,
     compact_debate_history,
     compact_generated_report,
-    compact_memory_recommendations,
+)
+from tradingagents.agents.utils.structured import (
+    bind_structured,
+    invoke_structured_or_freetext,
 )
 
 
-def create_research_manager(llm, memory):
+def create_research_manager(llm):
+    structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
+
     def research_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["investment_debate_state"].get("history", "")
@@ -20,57 +30,68 @@ def create_research_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
 
         investment_debate_state = state["investment_debate_state"]
-
-        curr_situation = build_compact_research_context(
+        research_brief = build_compact_research_context(
             market_report=market_research_report,
             sentiment_report=sentiment_report,
             news_report=news_report,
             fundamentals_report=fundamentals_report,
         )
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
-        past_memory_str = compact_memory_recommendations(
-            rec["recommendation"] for rec in past_memories
-        )
         history = compact_debate_history(history, max_chars=1600)
+        past_context = compact_generated_report(
+            state.get("past_context", ""),
+            max_chars=500,
+        )
+        lessons_block = (
+            f"\nPast lessons from prior decisions:\n{past_context}\n"
+            if past_context
+            else ""
+        )
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
-
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
-
-Additionally, develop a detailed investment plan for the trader. This should include:
-
-Your Recommendation: A decisive stance supported by the most convincing arguments.
-Rationale: An explanation of why these arguments lead to your conclusion.
-Strategic Actions: Concrete steps for implementing the recommendation.
-Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
-Keep the response tight: max 260 words.
-
-Here are your past reflections on mistakes:
-\"{past_memory_str}\"
+        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
 
 {instrument_context}
 
-Here is the compact research brief:
-{curr_situation}
+---
 
-Here is the debate:
-Debate History:
-{history}"""
-        response = llm.invoke(prompt)
-        response_text = compact_generated_report(response.content, max_chars=1500)
+**Rating Scale** (use exactly one):
+- **Buy**: Strong conviction in the bull thesis; recommend taking or growing the position
+- **Overweight**: Constructive view; recommend gradually increasing exposure
+- **Hold**: Balanced view; recommend maintaining the current position
+- **Underweight**: Cautious view; recommend trimming exposure
+- **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position
+
+Commit to a clear stance whenever the debate's strongest arguments warrant one; reserve Hold for situations where the evidence on both sides is genuinely balanced.
+
+---
+
+**Compact Research Brief:**
+{research_brief}
+{lessons_block}
+**Debate History:**
+{history}
+
+Keep the response tight: max 260 words.{get_language_instruction()}"""
+
+        investment_plan = invoke_structured_or_freetext(
+            structured_llm,
+            llm,
+            prompt,
+            render_research_plan,
+            "Research Manager",
+        )
 
         new_investment_debate_state = {
-            "judge_decision": response_text,
+            "judge_decision": investment_plan,
             "history": investment_debate_state.get("history", ""),
             "bear_history": investment_debate_state.get("bear_history", ""),
             "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": response_text,
+            "current_response": investment_plan,
             "count": investment_debate_state["count"],
         }
 
         return {
             "investment_debate_state": new_investment_debate_state,
-            "investment_plan": response_text,
+            "investment_plan": investment_plan,
         }
 
     return research_manager_node
